@@ -1,0 +1,72 @@
+# ============================================================
+# 路线 B：EFI 主体直接放在 oc/ 里一起上传。
+# oc/ 已经是脱敏版（三码为占位值），允许入库；
+# 任何本机原始 config.plist、备份、日志都不要放进仓库。
+# ============================================================
+
+# macOS 系统垃圾
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+.Spotlight-V100
+.Trashes
+.fseventsd
+.TemporaryItems
+.VolumeIcon.icns
+.com.apple.timemachine.donotpresent
+
+# 编辑器临时文件
+*.swp
+*~
+.idea/
+.vscode/
+
+# 编译产物（源码 .c / .m / .sh / .patch 要保留）
+build/
+*.o
+*.dSYM
+
+# tools/ 下 clang 编译出来的无扩展名可执行文件
+tools/vdacheck
+tools/avdec
+tools/avplay
+tools/fingerprobe
+
+# 测试素材（本机临时生成，体积大）
+*.mov
+*.mp4
+*.mkv
+*.h264
+*.hevc
+
+# 本机备份、安装镜像、工作数据
+backups/
+*.zip
+*.7z
+*.pkg
+*.dmg
+.workbuddy/
+
+# ============================================================
+# 本地备份配置：常含未脱敏的真实三码，绝不要覆盖进仓库
+# 例外：oc/config.plist 与根目录 config.release.plist 是脱敏版，
+#       这两个文件应该入库。
+# ============================================================
+*.plist.bak
+config.plist.*
+oldConfig.plist
+config-safe-*.plist
+*.bak
+*.backup
+*backup*
+*.before-*
+*.txt
+*.log
+
+# ============================================================
+# 私有 / 系统二进制（有版权，不该公开分发）
+# ============================================================
+AppleIntelTGLGraphics*
+NVMTLDriver*
+*MTLDriver
