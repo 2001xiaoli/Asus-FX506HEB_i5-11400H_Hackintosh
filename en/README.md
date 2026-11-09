@@ -49,22 +49,25 @@ Read from the actual machine (IORegistry / `system_profiler` / decompiled ACPI /
 
 5. [Patch Notes](docs/05-patches.md#s5)
 
+Appendix A. [WhateverXe Upgrade Notes (0.7.0 → 0.8.0)](docs/06-wex-upgrade.md#s6)
+
 ## 6. Credits & References
 
 | Project | Used for |
 | --- | --- |
-| [**WhateverXe**](https://github.com/b00t0x/WhateverXe) (b00t0x) | Foundation of the whole iGPU solution; our patch is based on the 0.7.0 source |
+| [**WhateverXe**](https://github.com/b00t0x/WhateverXe) (b00t0x) | Foundation of the whole iGPU solution; our patch is based on the 0.8.0 source |
 | [WhateverXe-patched OCLP](https://github.com/b00t0x/OpenCore-Legacy-Patcher) | Installs the donor graphics drivers (`WhateverXe-Graphics` pkg) |
 | [**nvidia-macos-driver**](https://github.com/nullmoth/nvidia-macos-driver) (NullMoth) | `NVRM` / `NVAccel` / `NVRMFB` / `NVRMAGDC` + `NVMTLDriver`; provides Metal 3 and NVDEC / NVENC hardware codecs |
 | [**VoodooI2C**](https://github.com/VoodooI2C/VoodooI2C) | I2C trackpad; PR **#586** supplies the TGL-H `0x43e8` match table |
 | [AirportItlwm](https://github.com/laobamac/itlwm) | Intel Wi-Fi |
 | [**MECHREVO-GM6AR57C-OpenCore**](https://github.com/559911/MECHREVO-GM6AR57C-OpenCore) (559911) | Section 4.8's `hwSetPanelPower` no-op when not powering on, and the `setDCState` DC guard; a key reference while debugging the black screen after display sleep |
 | [Samsung NP550XDA EFI](https://github.com/cost-12/Hackintosh-Samsung-Book-INTEL-CORE-I3-1115G4-11TH) (cost-12) | A comparable Tiger Lake + WhateverXe configuration |
-| [`patches/whateverxe-0.7.0-gt1.patch`](../patches/whateverxe-0.7.0-gt1.patch) (this repo) | Modified patch based on WhateverXe 0.7.0: fuse override, `-wex-edp-keep`, doze-hold, etc. See [Patch Notes](docs/05-patches.md#s5-1) |
+| [`patches/whateverxe-0.8.0-gt1.patch`](../patches/whateverxe-0.8.0-gt1.patch) (in use) | Patched WhateverXe 0.8.0: fuse override, `-wex-edp-keep`, doze-hold, PAVP guard. See [Patch Notes](docs/05-patches.md#s5-3) and [Appendix A](docs/06-wex-upgrade.md#s6) |
+| [`patches/whateverxe-0.7.0-gt1.patch`](../patches/whateverxe-0.7.0-gt1.patch) (historical) | Kept for reference |
 
 This repo is **only a usage and troubleshooting log**. All drivers, the bootloader, and donor packages belong to their respective authors. If links break or versions change, defer to the upstream repos.
 
-**License note**: the documentation and original tools here are under [MIT](../LICENSE). The patch under `patches/` is a derivative of upstream WhateverXe 0.7.0 and stays under its **BSD-3-Clause** license (Copyright © 2018 vit9696); keep the upstream copyright notice and disclaimer when redistributing it.
+**License note**: the documentation and original tools here are under [MIT](../LICENSE). The patch under `patches/` is a derivative of upstream WhateverXe 0.7.0 / 0.8.0 and stays under its **BSD-3-Clause** license (Copyright © 2018 vit9696); keep the upstream copyright notice and disclaimer when redistributing it.
 
 ---
 

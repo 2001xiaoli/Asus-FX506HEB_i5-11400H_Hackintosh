@@ -10,7 +10,7 @@
 
 按功能分组，括号内为版本，名称统一省略 `.kext` 后缀：
 
-- **基础**：Lilu 1.7.3、VirtualSMC 1.3.9、AMFIPass 1.4.1、**WhateverXe 0.7.0（本机补丁版，核心）**
+- **基础**：Lilu 1.7.3、VirtualSMC 1.3.9、AMFIPass 1.4.1、**WhateverXe 0.8.0（本机补丁版，核心）**
 - **显示 / 声音 / 电源**：AppleALC 1.9.9、BrightnessKeys 1.0.4、CpuTscSync 1.1.3、RestrictEvents 1.1.7、SMCBatteryManager / SMCLightSensor / SMCProcessor 1.3.9
 - **USB / 存储**：USBToolBox 1.2.0、UTBMap 1.1、XHCI-unsupported 0.9.2、NVMeFix 1.1.4、PC711Probe 1.8.1
 - **无线**：AirportItlwm 2.4.0、BlueToolFixup 2.7.3、IntelBTPatcher 2.5.0、IntelBluetoothFirmware 2.5.0
@@ -20,7 +20,7 @@ I2C 组顺序必须是「插件 → 主 kext → 卫星」：`VoodooInput → Vo
 
 ### 装进系统的驱动
 
-- `WhateverXe-Graphics-0.4.0.pkg` → `/Library/Extensions/AppleIntelTGLCompat.kext`、`AppleIntelTGLGraphics.kext`（16.0.32/16.0.0）、`AppleIntelTGLGraphicsFramebuffer.kext`（16.0.0），以及 `/Library/GPUBundles/` 下 4 个 bundle（`MTLDriver`、`GLDriver`、`XeCompilerAdapter`、`VADriver`）
+- `WhateverXe-Graphics-0.4.1.pkg` → `/Library/Extensions/AppleIntelTGLCompat.kext`（0.8.0）、`AppleIntelTGLGraphics.kext`（16.0.32）、`AppleIntelTGLGraphicsFramebuffer.kext`（16.0.32），以及 `/Library/GPUBundles/` 下 4 个 bundle（`MTLDriver`、`GLDriver`、`XeCompilerAdapter`、`VADriver`）。**`VADriver` 必须保持改名 `.disabled`**，否则开加速后一解码就 panic，见[附录 A](06-wex-upgrade.md#s6-5)
 - NullMoth `nvidia-macos-driver` 2.7.2 → `/Library/Extensions` 的 `NVRM`（GSP-RM 移植，管显存/中断）、`NVAccel`（注册 IOAccelerator）、`NVRMFB`、`NVRMAGDC`；外加 `/Library/GPUBundles/NVMTLDriver.bundle`
 
 `NVMTLDriver.bundle` 除 Metal 翻译层外还带完整编解码器：`libnvdec_h264.dylib`、`libnvdec_h264_t2d.dylib`、`libnvdec_hevc.dylib`、`libnvenc_h264_ga10x.dylib`、`libnvenc_hevc_ga10x.dylib`、`libnvmtl_translate.dylib`。这些 `libnvdec_*` 会向 VideoToolbox 注册解码器，所以 **H.264 / HEVC 硬解实际走独显 NVDEC**。注册条件是宿主进程已加载 VideoToolbox；白名单 `/Library/GPUBundles/nvmtl-allow.txt` 是 `*` 加 `!WindowServer`。

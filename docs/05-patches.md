@@ -29,3 +29,13 @@
 | 收尾 | `codesign -f -s - <文件>` ad-hoc 重签 |
 
 打之前先备份原文件，并用偏移处的原始字节校验（不匹配说明 donor 版本不同，别硬改）。效果：50 次提交 RSS 从 5.0→9.5MB 变成 5.0→5.7MB，500 次后 5.9MB。完整命令见[安装第 5 步](03-install.md#s3-5)。
+
+<a id="s5-3"></a>
+
+### 5.3 `patches/whateverxe-0.8.0-gt1.patch`（本机在用）
+
+相对官方 **WhateverXe 0.8.0** 源码，381 行 diff，只动 `kern_xe.cpp`（319 行）和 `kern_xe.hpp`（62 行）。用 5.1 的功能 diff 作补丁移植，`patch -p1 -F3` **15 个 hunk 全通过、0 个 `.rej`**；功能与 5.1 相同，差异只在适配 0.8.0 的行号。0.8.0 新增的 `kern_display13_*.inc` 都是 Display13 / DSI 专用，不碰 TGL eDP 路径。
+
+产物 `WhateverXe.kext`（0.8.0 RELEASE / 1,840,416 B / sha256 `28ec9a97…82227`）已放在 `oc/Kexts/`。**必须与 WhateverXe-Graphics 0.4.1 配套**，先装 pkg 再换 kext，最后重启。
+
+升级步骤、三个坑、Intel VDA 必须下线的完整推导与 panic 判据、验证清单，见[附录 A](06-wex-upgrade.md#s6)。

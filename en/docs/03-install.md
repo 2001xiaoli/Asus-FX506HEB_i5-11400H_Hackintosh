@@ -22,18 +22,18 @@ You're done when `TPD0` shows registered / matched / active and `VoodooI2CHID` /
 
 **Step 2 · Install the donor drivers**
 
-From the [WhateverXe](https://github.com/b00t0x/WhateverXe) Releases, install the `WhateverXe-Graphics` pkg (0.4.0 here), then run `kmutil inspect | grep -i TGL` to confirm the three kexts landed in the AuxKC.
+From the [WhateverXe](https://github.com/b00t0x/WhateverXe) Releases, install the `WhateverXe-Graphics` pkg (0.4.1 here; must pair with WEX 0.8.0), then run `kmutil inspect | grep -i TGL` to confirm the three kexts landed in the AuxKC.
 
 <a id="s3-3"></a>
 
 **Step 3 · Build the patched WhateverXe**
 
-Stock 0.7.0 rejects this 11400H (fuse `video=4`), so you must use [this repo's patch](05-patches.md#s5-1).
+Stock 0.8.0 still rejects this 11400H (fuse `video=4`), so you must use [this repo's patch](05-patches.md#s5-3).
 
 ```bash
 git clone https://github.com/b00t0x/WhateverXe.git && cd WhateverXe
-git checkout <tag or commit corresponding to 0.7.0>
-patch -p1 < /path/to/ASUS-TGL-H45-OpenCore/patches/whateverxe-0.7.0-gt1.patch
+git checkout <tag or commit corresponding to 0.8.0>
+patch -p1 < /path/to/ASUS-TGL-H45-OpenCore/patches/whateverxe-0.8.0-gt1.patch
 python3 tools/build.py --release --sdk /path/to/MacKernelSDK-master \
   --lilu /path/to/Lilu.kext --output build
 ```
@@ -79,6 +79,7 @@ A makes VideoToolbox skip the fused-off iGPU media engine so decoding falls thro
 | Only 7MB VRAM | Check the donor pkg, AuxKC validity, and whether EFI holds the patched WEX |
 | Black screen but audio works | Confirm `-wex-edp-keep` is present and the binary recognizes it |
 | Screen stays dark after display sleep | `strings` for `WEXEDPDozeHoldCount` to confirm the doze-hold build |
-| Hardware decode panics again | Check that `AppleIntelTGLGraphicsVADriver.bundle` is still `000` |
+| Hardware decode panics again | Check that `AppleIntelTGLGraphicsVADriver.bundle` is renamed `.disabled` (or chmod 000); `sudo bash tools/accel-trial.sh off` rolls everything back |
+| Auto-reboot at the end of the progress bar | That is the `VTDecoderXPCService` media-engine panic (CR2=`0x284`); confirm the Intel VADriver is offline — see [Appendix A](06-wex-upgrade.md#s6-5) |
 
 Back up the whole EFI before every change, then run `plutil -lint config.plist` to validate the format.

@@ -9,7 +9,7 @@
 | 限制 | 说明 |
 | --- | --- |
 | VP9 / AV1 无硬解 | `VTIsHardwareDecodeSupported()` 实测只有 H.264 / HEVC 支持，bundle 里没有对应 decoder。4K AV1 只能 CPU 软解，看在线视频优先选 HEVC / H.264 源 |
-| 核显媒体引擎熔断 | `video=4` → VCS0 / VECS0 不存在。强开核显 accelerator 走 VideoToolbox，两次 panic 都指到 `IGHardwareRingBufferMedia::init` 里 `scheduler->cs[1]` 为 NULL。芯片层面缺失，patch 骗不过去；代价是 VADriver 必须保持 `chmod 000` |
+| 核显媒体引擎熔断 | `video=4` → VCS0 / VECS0 不存在。核显 accelerator 本身是能开的（Metal 2 可用、桌面合成已硬件加速），但凡走 VideoToolbox 硬解必崩：`IGHardwareRingBufferMedia::init` 里 `scheduler->cs[1]` 为 NULL，CR2=`0x284`，进程 `VTDecoderXPCService`。芯片层面缺失，patch 骗不过去；因此 `AppleIntelTGLGraphicsVADriver.bundle` 必须保持改名 `.disabled`（或 `chmod 000`），解码交给独显 nvdec / 软解。详见[附录 A](06-wex-upgrade.md#s6-5) |
 | 内屏只接核显 | Optimus 无 MUX，内屏 eDP 走核显，独显不驱动屏幕 |
 | Thunderbolt / USB4 | 硬件在，macOS 侧没有驱动 |
 | MTLDriver 是 ad-hoc 签名 | 修泄漏后重签，在 `amfi=0x80` 下能加载；系统更新或重装 donor 包会覆盖补丁，90KB/次的泄漏会回来 |

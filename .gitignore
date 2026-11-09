@@ -55,6 +55,7 @@ backups/
 # ============================================================
 *.plist.bak
 config.plist.*
+!oc/config.plist.good
 oldConfig.plist
 config-safe-*.plist
 *.bak

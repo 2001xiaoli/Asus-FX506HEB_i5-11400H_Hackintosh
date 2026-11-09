@@ -49,22 +49,25 @@
 
 5\. [补丁说明](docs/05-patches.md#s5)
 
+附录 A.[WhateverXe 升级记录（0.7.0 → 0.8.0）](docs/06-wex-upgrade.md#s6)
+
 ## 6. 致谢与参考项目
 
 | 项目                                                                                                            | 用在哪                                                                                      |
 | ------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
-| [**WhateverXe**](https://github.com/b00t0x/WhateverXe)（b00t0x）                                                | 整个核显方案的地基，本机补丁基于 0.7.0 源码                                                                |
+| [**WhateverXe**](https://github.com/b00t0x/WhateverXe)（b00t0x）                                                | 整个核显方案的地基，本机补丁基于 0.8.0 源码                                                                |
 | [WhateverXe 修改版 OCLP](https://github.com/b00t0x/OpenCore-Legacy-Patcher)                                      | 安装 donor 图形驱动（`WhateverXe-Graphics` pkg）                                                 |
 | [**nvidia-macos-driver**](https://github.com/nullmoth/nvidia-macos-driver)（NullMoth）                          | `NVRM` / `NVAccel` / `NVRMFB` / `NVRMAGDC` + `NVMTLDriver`，提供 Metal 3 和 NVDEC / NVENC 硬解 |
 | [**VoodooI2C**](https://github.com/VoodooI2C/VoodooI2C)                                                       | I2C 触摸板；PR **#586** 提供 TGL-H `0x43e8` 匹配表                                                |
 | [AirportItlwm](https://github.com/laobamac/itlwm)                                                             | Intel Wi-Fi                                                                              |
 | [**MECHREVO-GM6AR57C-OpenCore**](https://github.com/559911/MECHREVO-GM6AR57C-OpenCore)（559911）                | 4.8 节的 `hwSetPanelPower` 非上电 no-op、`setDCState` DC 守卫；排查熄屏唤醒黑屏时的重要参照                     |
 | [Samsung NP550XDA EFI](https://github.com/cost-12/Hackintosh-Samsung-Book-INTEL-CORE-I3-1115G4-11TH)（cost-12） | Tiger Lake + WhateverXe 同类配置对照                                                           |
-| [`patches/whateverxe-0.7.0-gt1.patch`](patches/whateverxe-0.7.0-gt1.patch)（本仓库补丁）                    | 基于 WhateverXe 0.7.0 的修改补丁：fuse 放行、`-wex-edp-keep`、doze-hold 等，见[补丁说明](docs/05-patches.md#s5-1) |
+| [`patches/whateverxe-0.8.0-gt1.patch`](patches/whateverxe-0.8.0-gt1.patch)（本机在用） | 基于 WhateverXe 0.8.0 的修改补丁：fuse 放行、`-wex-edp-keep`、doze-hold、PAVP 守卫等，见[补丁说明](docs/05-patches.md#s5-3) 与[附录 A](docs/06-wex-upgrade.md#s6) |
+| [`patches/whateverxe-0.7.0-gt1.patch`](patches/whateverxe-0.7.0-gt1.patch)（历史） | 0.7.0 时期的补丁，保留供对照 |
 
 本仓库只是**使用与排障记录**，所有驱动、引导器、donor 包的著作权归各自项目所有。链接失效或版本更新请以上游仓库为准。
 
-**许可说明**：本仓库的文档与自写工具采用 [MIT](LICENSE)。`patches/` 下的补丁是上游 WhateverXe 0.7.0 的衍生作品，遵循其 **BSD-3-Clause** 许可（Copyright © 2018 vit9696）；转载或再分发时须一并保留上游版权声明与免责条款。
+**许可说明**：本仓库的文档与自写工具采用 [MIT](LICENSE)。`patches/` 下的补丁是上游 WhateverXe 0.7.0 / 0.8.0 的衍生作品，遵循其 **BSD-3-Clause** 许可（Copyright © 2018 vit9696）；转载或再分发时须一并保留上游版权声明与免责条款。
 
 ---
 

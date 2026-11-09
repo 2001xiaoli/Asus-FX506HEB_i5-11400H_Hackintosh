@@ -1,0 +1,381 @@
+--- a/WhateverXe/kern_xe.cpp
++++ b/WhateverXe/kern_xe.cpp
+@@ -3871,6 +3871,14 @@
+ 
+ void XE::selectProfile(const XELP::Profile &profile) {
+     xeProfile=profile;
++    // One opt-in switch controls the whole GT1 framebuffer-only experiment.
++    // Without it this binary behaves exactly like stock 0.7.0.
++    gt1FramebufferOnly=checkKernelArgument("-wex-gt1-fb-only");
++    tglEdpKeep=checkKernelArgument("-wex-edp-keep");
++    gt1AcceleratorTrial=checkKernelArgument("-wex-gt1-accel");
++    IORegistryEntry::getRegistryRoot()->setProperty("WhateverXeGT1FramebufferOnly",gt1FramebufferOnly);
++    IORegistryEntry::getRegistryRoot()->setProperty("WhateverXeTGLEDPKeep",tglEdpKeep);
++    IORegistryEntry::getRegistryRoot()->setProperty("WhateverXeGT1AcceleratorTrial",gt1AcceleratorTrial);
+     tglGT2Detected=profile.admitted() && !profile.overridden() && XELP::tigerLakeGT2Device(profile.identity);
+     display12SmallGTDetected=profile.admitted() && XELP::display12SmallGT(profile.gt);
+     adlsDisplaySelected=profile.admitted() && XELP::displayAdapter(profile.family)==XELP::DisplayAdapter::ADLS;
+@@ -3909,6 +3917,7 @@
+     tglInactivePorts=tglPG1Poll=tglClockOrderRequested=tglTrainingLeaseRequested=tglRequested;
+     tglProgramEnabled=!checkKernelArgument("-wex-tgl-prog-off");
+     tglAcceleratorRequested=tglRequested && !checkKernelArgument("-wex-noaccel");
++    if(gt1FramebufferOnly && !gt1AcceleratorTrial)tglAcceleratorRequested=false; // FB-only unless the accelerator trial is explicitly enabled.
+     if(tglRequested) {
+         if(XELP::kernelOS(version)==XELP::OS::Unknown) {
+             tglRequested=tglAcceleratorRequested=false;return;
+@@ -4459,7 +4468,15 @@
+             auto gt=AlderLakeN::readGT(io,true,&edram);
+             const bool readoutReady=(gt.status==AlderLakeN::GTStatus::Complete || gt.status==AlderLakeN::GTStatus::ProfileMismatch) &&
+                 gt.requestedMask==3 && gt.releasedMask==3 && !gt.releaseFailedMask && edram==0;
+-            display12SmallGTReady=display12SmallGTDetected && readoutReady && XELP::decodeSmallGT(gt.fuses,display12SmallGT);
++            const bool smallGTDecoded=XELP::decodeSmallGT(gt.fuses,display12SmallGT);
++            // TGL-H45 GT1 (i5-11400H, 8086:9A68) reports video fuse 4 instead
++            // of the documented 1/5. Slice/DSS/EU/L3 still decode to the
++            // supported 16-EU shape. Only used in the opt-in FB-only trial.
++            const bool smallGTFuseExtension=gt1FramebufferOnly && !smallGTDecoded &&
++                ((~gt.fuses[4])&0xFF)==4 && (((~gt.fuses[4])>>16)&0xF)==1 &&
++                XELP::smallGTResources(gt.fuses[0]&0xFF,gt.fuses[1]&0x3F,
++                                       gt.fuses[2]&0xFF,gt.fuses[3]&0xFF,display12SmallGT);
++            display12SmallGTReady=display12SmallGTDetected && readoutReady && (smallGTDecoded || smallGTFuseExtension);
+             tglGT2Ready=tglGT2Detected && readoutReady && XELP::decodeTGLGT2(gt.fuses,tglGT2Resources);
+             if(tglGT2Detected) {
+                 physicalGPU->setProperty("TGLGT2Qualified",tglGT2Ready);
+@@ -4468,6 +4485,7 @@
+             if(display12SmallGTDetected)physicalGPU->setProperty(adlsDisplaySelected?"ADLSGTQualified":"XELPSmallGTQualified",display12SmallGTReady);
+             if(display12SmallGTDetected)physicalGPU->setProperty(adlsDisplaySelected?"ADLSGTBoot":"XELPSmallGTBoot",&gt,sizeof(gt));
+             if(display12SmallGTDetected)physicalGPU->setProperty(adlsDisplaySelected?"ADLSEDRAM":"XELPSmallGTEDRAM",edram,32);
++            if(display12SmallGTDetected)physicalGPU->setProperty("XELPSmallGTFuseExtension",smallGTFuseExtension);
+             if(adlsDisplaySelected) {
+                 uint32_t registers[][2] {
+                     {0x42000,0},{0x45404,0},{0x45450,0},{0x45454,0},
+@@ -11607,6 +11625,17 @@
+ 			const bool observed = patcher.solveSymbol<mach_vm_address_t>(index,"__ZN16IntelAccelerator4stopEP9IOService",address,size)==address+0x263C8 &&
+ 				patcher.routeMultiple(index, observations, arrsize(observations), address, size);
+ 			IORegistryEntry::getRegistryRoot()->setProperty("TGLWEGAcceleratorObservationsRouted", observed);
++			if (callbackXE->gt1AcceleratorTrial) {
++				// video fuse 4 (no VCS0/VECS0): IntelAccelerator+0x1278 (media engine) is never
++				// built, yet startGraphicsEngine still calls PAVPCommandCallback(command 3) and
++				// dereferences [media+0xb8]. Guard that path so the accelerator start can go on;
++				// the caller ignores the return value and 0xe00002bc is this function's own
++				// "unsupported" code (see the default it loads at PAVPCommandCallback+0x241).
++				KernelPatcher::RouteRequest pavp("__ZN16IntelAccelerator19PAVPCommandCallbackE22PAVPSessionCommandID_tjPjb", wrapTGLPAVPCommandCallback, orgTGLPAVPCommandCallback);
++				const bool pavpRouted = patcher.routeMultiple(index, &pavp, 1, address, size);
++				IORegistryEntry::getRegistryRoot()->setProperty("TGLWEGRoutePAVPGuard", pavpRouted);
++				patcher.clearError();
++			}
+ 			bool adlnObserved=true;
+ 			if (adlnDetected) {
+ 				const uint8_t callbackEntry[] {0x55,0x48,0x89,0xE5,0x48,0x8B,0xBF,0x48,0x12,0,0};
+@@ -13103,6 +13132,15 @@
+      patcher.clearError();
+     }
+     IORegistryEntry::getRegistryRoot()->setProperty("TGLBootstrapAUXReady",tglBootstrapAUXReady);
++			}
++			{
++				// Opt-in -wex-edp-keep: the firmware GOP already trained and enabled the
++				// internal eDP link, so suppress the donor's full modeset and let it do a
++				// partial modeset on the existing link (issue #43, TGL port by Aqpcet).
++				KernelPatcher::RouteRequest route("__ZN31AppleIntelFramebufferController16hwRegsNeedUpdateEP21AppleIntelFramebufferP21AppleIntelDisplayPathP10CRTCParamsPK29IODetailedTimingInformationV2PN16AppleIntelScaler12SCALERPARAMSE",wrapTGLRegsNeedUpdate,orgTGLRegsNeedUpdate);
++				const bool routed = tglEdpKeep && patcher.routeMultiple(index, &route, 1, address, size);
++				IORegistryEntry::getRegistryRoot()->setProperty("TGLWEGRouteEDPKeep", routed);
++				patcher.clearError();
+ 			}
+ 			{
+ 				KernelPatcher::RouteRequest observations[] {
+@@ -13654,6 +13692,49 @@
+     // PANEL_TIMING_INSTALL_END
+    }
+ 
++   if(tglActive) {
++    // PANEL_POWER_WAKE_GUARD: a retained pipe never replays the PPS sequence, so
++    // the donor's power-down path leaves the panel blank after display wake even
++    // though IODisplayWrangler reports it on. Only power-on reaches the donor;
++    // power-down becomes a no-op and the backlight alone owns display sleep.
++    const char *symbol="__ZN31AppleIntelFramebufferController15hwSetPanelPowerEj";
++    const uint8_t entry[]={0x55,0x48,0x89,0xe5,0x41,0x57,0x41,0x56,0x53,0x48,0x83,0xec,0x28,0x89,0xf3,0x49,0x89,0xff};
++    const uint8_t stateTest[]={0x8b,0xb7,0x48,0x0d,0x00,0x00,0xe8,0x30,0xb1,0xff,0xff,0x83,0xfb,0x02};
++    const auto target=patcher.solveSymbol(index,symbol,address,size);
++    const bool known=size>=0x48B88 && target==address+0x48652 &&
++     !memcmp(reinterpret_cast<void *>(target),entry,sizeof(entry)) &&
++     !memcmp(reinterpret_cast<void *>(address+0x4866b),stateTest,sizeof(stateTest));
++    KernelPatcher::RouteRequest route(symbol,wrapTGLPanelPower,orgTGLPanelPower);
++    tglPanelPowerGuardReady=known && patcher.routeMultiple(index,&route,1,address,size);
++    IORegistryEntry::getRegistryRoot()->setProperty("TGLPanelPowerGuardReady",tglPanelPowerGuardReady);
++    patcher.clearError();
++   }
++
++   if(tglActive) {
++    // PANEL_DC_GUARD: layer 2 of the wake-black fix. A panel that merely stays powered is
++    // not enough: entering Doze still arms DC6/DC9, and the DC exit path on this build fails
++    // often enough that the next wake finds the display power well, DBUF and eDP AUX gated.
++    // Track every framebuffer's power state and refuse to arm DC while one is in Doze.
++    const char *dcSymbol="__ZN31AppleIntelFramebufferController10setDCStateEb";
++    const char *stateSymbol="__ZN21AppleIntelFramebuffer24setFramebufferPowerStateEj";
++    const uint8_t dcEntry[]={0x55,0x48,0x89,0xe5,0x41,0x56,0x53,0x89,0xf3,0x49,0x89,0xfe};
++    const uint8_t stateEntry[]={0x55,0x48,0x89,0xe5,0x41,0x57,0x41,0x56,0x53,0x50,0x41,0x89,0xf6,0x49,0x89,0xff};
++    const auto dcTarget=patcher.solveSymbol(index,dcSymbol,address,size);
++    const auto stateTarget=patcher.solveSymbol(index,stateSymbol,address,size);
++    const bool known=size>=0x48B88 &&
++     dcTarget==address+0x472B4 && !memcmp(reinterpret_cast<void *>(address+0x472B4),dcEntry,sizeof(dcEntry)) &&
++     stateTarget==address+0x24DE8 && !memcmp(reinterpret_cast<void *>(address+0x24DE8),stateEntry,sizeof(stateEntry));
++    patcher.clearError();
++    KernelPatcher::RouteRequest dcRoutes[] {
++     {stateSymbol,wrapTGLFBSetPowerState,orgTGLFBSetPowerState},
++     {dcSymbol,wrapTGLSetDCState,orgTGLSetDCState}
++    };
++    tglDcGuardReady=known && patcher.routeMultiple(index,dcRoutes,arrsize(dcRoutes),address,size);
++    IORegistryEntry::getRegistryRoot()->setProperty("TGLWEXDozeDCGuardReady",tglDcGuardReady);
++    IORegistryEntry::getRegistryRoot()->setProperty("TGLWEXFBStateRouted",tglDcGuardReady);
++    patcher.clearError();
++   }
++
+    if(adlsDisplaySelected || (display13FramebufferRequested && adlnOutputWiring.panel)) {
+     // ADLS_PANEL_PWM_INSTALL: preflight the native lifecycle and PWM enable site.
+     const char *light="__ZN31AppleIntelFramebufferController10LightUpEDPEP21AppleIntelFramebufferP21AppleIntelDisplayPathPK29IODetailedTimingInformationV2";
+@@ -13804,7 +13885,63 @@
+  if(!result)tglApplyPanelTiming(controller,true);
+  return result;
+ }
++uint32_t XE::wrapTGLPanelPower(void *controller,uint32_t state) {
++ auto s=callbackXE;
++ if(state!=2) {
++  // Nothing replays PPS after a kept pipe, so a power-down would only blank the
++  // panel. Count the skipped transition instead of touching hardware.
++  static uint32_t skipped {};
++  IORegistryEntry::getRegistryRoot()->setProperty("TGLPanelPowerOffSkipped",__sync_add_and_fetch(&skipped,1),32);
++  return 0;
++ }
++ return FunctionCast(wrapTGLPanelPower,s->orgTGLPanelPower)(controller,state);
++}
+ 
++bool XE::tglFBDozeActive() {
++ auto s=callbackXE;
++ for(unsigned i=0;i<arrsize(s->tglFBKeys);++i)
++  if(s->tglFBKeys[i] && s->tglFBStates[i]==1) return true;
++ return false;
++}
++
++void XE::wrapTGLFBSetPowerState(void *fb,uint32_t state) {
++ auto s=callbackXE;
++ // Record the new state *before* the native body runs: the native transition is what calls
++ // disableDisplay / setDCState, and both guards key off this table. Recording afterwards
++ // would make every guard look at the previous state and miss the transition entirely.
++ if(fb){
++  for(unsigned i=0;i<arrsize(s->tglFBKeys);++i){
++   if(s->tglFBKeys[i]==fb) { s->tglFBStates[i]=state; break; }
++   if(!s->tglFBKeys[i]) { s->tglFBKeys[i]=fb; s->tglFBStates[i]=state; break; }
++  }
++ }
++ FunctionCast(wrapTGLFBSetPowerState,s->orgTGLFBSetPowerState)(fb,state);
++ if(!fb) return;
++ if(auto root=IORegistryEntry::getRegistryRoot()){
++  root->setProperty("TGLWEXFBStateRouted",true);
++  root->setProperty("TGLWEXFBStateLast",state,32);
++  root->setProperty("TGLWEXFBDoze",tglFBDozeActive());
++ }
++ SYSLOG("igfx","TGL DC guard: framebuffer %p power state -> %u",fb,state);
++}
++
++void XE::wrapTGLSetDCState(void *controller,bool enable) {
++ auto s=callbackXE;
++ const auto org=FunctionCast(wrapTGLSetDCState,s->orgTGLSetDCState);
++ // Only the Doze transition is dangerous: that is the one whose DC exit can fail.
++ if(!enable || !tglFBDozeActive()) {
++  org(controller,enable);
++  return;
++ }
++ static uint32_t skipped {};
++ const uint32_t count=__sync_add_and_fetch(&skipped,1);
++ if(auto root=IORegistryEntry::getRegistryRoot()){
++  root->setProperty("TGLWEXDozeDCGuardReady",true);
++  root->setProperty("TGLWEXDozeDCGuardHits",count,32);
++ }
++ SYSLOG("igfx","TGL DC guard: keep power well alive, skip DC arming in Doze (count=%u)",count);
++}
++
+ // ADL-S native PWM panel adapter. The panel lifecycle remains synchronous
+ // and donor-owned; only its period, polarity and duty arithmetic are replaced.
+ bool XE::adlsPanelPWMTarget(void *controller,void *&access,void *&power) {
+@@ -17372,6 +17509,8 @@
+ }
+ 
+ uint32_t XE::wrapTGLRegisterRead(void *access, unsigned long reg) {
++	if (reg == 0x2910 && callbackXE->gt1FramebufferOnly)
++		return 0; // GT1 GPU_TICKS hard-hang workaround (WhateverXe issue #11).
+  if(comboClockAccess(access))reg=comboClockTransaction.translation.reg(reg,XELPComboClock::donorPC(callbackXE->framebufferClockImage,reinterpret_cast<uintptr_t>(__builtin_return_address(0))));
+  const bool trace=tglTransitionRegister(reg);
+  if(trace)tglTransitionRecord(35,false,access,reg,tglConnectionCaller(__builtin_return_address(0)),0);
+@@ -18697,6 +18836,70 @@
+ 	return r;
+ }
+ 
++uint32_t XE::wrapTGLRegsNeedUpdate(void *controller, void *fb, void *path, void *want, const void *timing, void *scaler) {
++	const auto org = FunctionCast(wrapTGLRegsNeedUpdate, callbackXE->orgTGLRegsNeedUpdate);
++	const uint32_t result = org(controller, fb, path, want, timing, scaler);
++	if (!callbackXE->tglEdpKeep || !path)
++		return result;
++	// The donor itself treats path+0x3644 == 2 as "this pipe is already enabled".
++	// When the firmware GOP left the internal eDP link up, answer "no update" so the
++	// donor only reprograms plane/scaler (partial modeset) and never stops the link.
++	const auto p = static_cast<const uint8_t *>(path);
++	const uint32_t pipe = *reinterpret_cast<const uint32_t *>(p + 0x3644);
++	auto s = callbackXE;
++	const uint32_t calls = __sync_add_and_fetch(&s->tglEdpKeepCalls, 1);
++	// EDP_KEEP_AFTER_DOZE: display sleep calls disableDisplay, so by the time the wake-up
++	// modeset asks this question path+0x3644 is no longer 2. Passing the donor's answer
++	// through there makes it run a *complete* modeset, which retrains the eDP link - and
++	// link training phase 2 fails on this panel:
++	//   [IGFB][ERROR][LINK_TRAINING] Phase 2 of link training failed
++	//   [IGFB][ERROR][DISPLAY] FB0: Hardware mode set failed, err = 0xe00002bc
++	//   [IGFB][ERROR][DISPLAY] FB0 is not enabled            (forever)
++	// Once a teardown was seen keep answering "no update" so wake-up reuses exactly the
++	// partial modeset that lights the panel at boot ("Partial modeset by updating plane").
++	const bool keep = (pipe == 2) || s->tglEdpKeepBroken;
++	if (!keep) {
++		const uint32_t passed = __sync_add_and_fetch(&s->tglEdpKeepPassed, 1);
++		if (auto root = IORegistryEntry::getRegistryRoot()) {
++			root->setProperty("WEXEDPKeepCalls", calls, 32);
++			root->setProperty("WEXEDPKeepPassed", passed, 32);
++		}
++		if (passed <= 8)
++			SYSLOG("igfx", "TGL eDP keep: pass-through (pipe=%u donor=%u calls=%u passed=%u)", pipe, result, calls, passed);
++		return result;
++	}
++	const uint32_t count = __sync_add_and_fetch(&s->tglEdpKeptCount, 1);
++	if (auto root = IORegistryEntry::getRegistryRoot()) {
++		root->setProperty("WEXEDPKeepReady", true);
++		root->setProperty("WEXEDPKept", count, 32);
++		root->setProperty("WEXEDPKeepCalls", calls, 32);
++		if (count == 1)
++			root->setProperty("WEXEDPKeepFirst", result, 32);
++		if (s->tglEdpKeepBroken) {
++			const uint32_t after = __sync_add_and_fetch(&s->tglEdpKeepAfterDoze, 1);
++			root->setProperty("WEXEDPKeepAfterDoze", after, 32);
++		}
++	}
++	SYSLOG("igfx", "TGL eDP keep: partial modeset (pipe=%u donor=%u count=%u tornDown=%u)", pipe, result, count, s->tglEdpKeepBroken ? 1 : 0);
++	return 0;
++}
++
++uint32_t XE::wrapTGLPAVPCommandCallback(void *accel, uint32_t command, uint32_t arg, uint32_t *out, bool flag) {
++	if (accel) {
++		// IntelAccelerator+0x1278 is the media-engine object. With video fuse 4 (this part
++		// reports 0xe00fb => video 4) VCS0/VECS0 are fused off, so that pointer stays null
++		// and the native body would fault on [0 + 0xb8]. Everything else stays native.
++		const auto media = *reinterpret_cast<void **>(static_cast<uint8_t *>(accel) + 0x1278);
++		if (!media) {
++			static uint32_t skipped {};
++			if (auto root = IORegistryEntry::getRegistryRoot())
++				root->setProperty("TGLPAVPUnavailable", __sync_add_and_fetch(&skipped, 1), 32);
++			return 0xe00002bc; // kIOReturnUnsupported; startGraphicsEngine ignores the value.
++		}
++	}
++	return FunctionCast(wrapTGLPAVPCommandCallback, callbackXE->orgTGLPAVPCommandCallback)(accel, command, arg, out, flag);
++}
++
+ void *XE::wrapTGLPathLookup(void *port) {
+ 	const auto path = FunctionCast(wrapTGLPathLookup, callbackXE->orgTGLPathLookup)(port);
+ 	tglObservePath(port, path, 1, true, path ? 0 : 1, 0, __builtin_return_address(0));
+@@ -18730,8 +18933,23 @@
+ 	auto caller = __builtin_return_address(0);
+ 	tglObservePath(nullptr, path, 4, false, 0, flag, caller);
+ 	auto s = callbackXE;
+-	auto port = path ? *reinterpret_cast<void **>(static_cast<uint8_t *>(path) + 0x3648) : nullptr;
++	// EDP_KEEP_DOZE_HOLD: a display-sleep transition runs disableDisplay, which tears the
++	// whole pipe down. On this panel that is unrecoverable - the wake-up modeset retrains
++	// the eDP link, link training phase 2 fails (err 0xe00002bc, "FB0 is not enabled") and
++	// the screen stays dark until a power cycle. While the internal framebuffer is in Doze
++	// keep scanning out and let the backlight do the blanking: nothing about the link is
++	// touched, so wake-up needs no rebuild at all.
++	if (s->tglEdpKeep && s->tglEdpKeptCount && tglFBDozeActive()) {
++		const uint32_t held = __sync_add_and_fetch(&s->tglDozeHoldCount, 1);
++		if (auto root = IORegistryEntry::getRegistryRoot()) {
++			root->setProperty("WEXEDPDozeHold", true);
++			root->setProperty("WEXEDPDozeHoldCount", held, 32);
++		}
++		SYSLOG("igfx", "TGL eDP keep: doze hold, disableDisplay skipped (%u)", held);
++		return 0;
++	}
+ 	auto &tx = tglClockOffTransaction;
++	auto port = path ? *reinterpret_cast<void **>(static_cast<uint8_t *>(path) + 0x3648) : nullptr;
+ 	const auto thread = reinterpret_cast<uintptr_t>(current_thread());
+ 	const bool owned = s->tglClockOffCaller && tglClockOrderTarget(controller, port, path, fb) &&
+ 		__sync_bool_compare_and_swap(&tx.thread, 0, thread);
+@@ -18742,6 +18960,15 @@
+ 		tx.pending = false;
+ 	}
+ 	const auto r = FunctionCast(wrapTGLDisableDisplay, callbackXE->orgTGLDisableDisplay)(controller, fb, path, flag);
++	// EDP_KEEP_SCOPE: arm the one-shot release only after the boot-time keep already ran,
++	// so a disable that happens before the first modeset cannot weaken that first partial
++	// modeset (that is the only reason the internal panel lights up at all on this part).
++	if (callbackXE->tglEdpKeep && callbackXE->tglEdpKeptCount && !callbackXE->tglEdpKeepBroken) {
++		callbackXE->tglEdpKeepBroken = true;
++		if (auto root = IORegistryEntry::getRegistryRoot())
++			root->setProperty("WEXEDPKeepArmed", true);
++		SYSLOG("igfx", "TGL eDP keep: pipe torn down, next regs update will be full");
++	}
+ 	if (owned) {
+ 		// Preserve the original write if an unexpected native branch skipped
+ 		// clock teardown. Never carry a deferred request into a later modeset.
+--- a/WhateverXe/kern_xe.hpp
++++ b/WhateverXe/kern_xe.hpp
+@@ -530,12 +530,26 @@
+  static void cachePanelDepth(void *port,uint32_t block,const uint8_t *data,uint32_t result);
+  void processNativePanel(KernelPatcher &patcher,size_t index,mach_vm_address_t address,size_t size);
+  bool tglPanelTimingReady {};
+- mach_vm_address_t orgTGLPanelTiming {},orgTGLPanelConfig {};
++ mach_vm_address_t orgTGLPanelTiming {},orgTGLPanelConfig {},orgTGLPanelPower {};
++ bool tglPanelPowerGuardReady {};
+  uint32_t tglPanelTimingBIOS[3] {};
+  bool tglPanelTimingBIOSValid {};
+  static void tglApplyPanelTiming(void *controller,bool apply);
+  static void wrapTGLPanelConfig(void *controller,uint32_t config);
+  static uint32_t wrapTGLPanelTiming(void *controller);
++ static uint32_t wrapTGLPanelPower(void *controller,uint32_t state);
++ // PANEL_DC_GUARD: keeping the panel powered is only layer 1 of the wake fix. On the way
++ // into Doze the donor arms DC6/DC9, and exiting DC is probabilistic on this build: when it
++ // fails, the display power well, DBUF and eDP AUX stay gated, every AUX transaction times
++ // out and the panel never comes back (black screen that only a cold boot clears). Track
++ // framebuffer power states and refuse to arm DC while any framebuffer sits in Doze.
++ mach_vm_address_t orgTGLSetDCState {},orgTGLFBSetPowerState {};
++ bool tglDcGuardReady {};
++ void *tglFBKeys[4] {};
++ uint32_t tglFBStates[4] {};
++ static void wrapTGLSetDCState(void *controller,bool enable);
++ static void wrapTGLFBSetPowerState(void *fb,uint32_t state);
++ static bool tglFBDozeActive();
+ 	static uint32_t tglPanelDepthPort(void *port);
+ 	static void wrapTGLModeTiming(void *controller,void *fb,void *timing);
+ 	mach_vm_address_t orgTGLGamma10 {}, orgTGLRegisterWrite {}, orgTGLFastRegisterWrite {};
+@@ -758,6 +772,10 @@
+ 	static uint32_t wrapTGLReadAUX(void *port, uint32_t address, void *data, uint32_t length);
+ 	static uint32_t wrapTGLWriteAUX(void *port, uint32_t address, void *data, uint32_t length);
+ 	static uint32_t wrapTGLI2CAUX(void *port, uint32_t command, uint32_t *packet, uint32_t length, uint8_t flag);
++	mach_vm_address_t orgTGLRegsNeedUpdate {};
++	static uint32_t wrapTGLRegsNeedUpdate(void *controller, void *fb, void *path, void *want, const void *timing, void *scaler);
++	mach_vm_address_t orgTGLPAVPCommandCallback {};
++	static uint32_t wrapTGLPAVPCommandCallback(void *accel, uint32_t command, uint32_t arg, uint32_t *out, bool flag);
+ 	mach_vm_address_t orgTGLFreeResources {}, orgTGLFreePathResources {}, orgTGLAllocateResources {};
+ 	mach_vm_address_t orgTGLFBDisable {}, orgTGLReleaseResources {}, orgTGLCommitResources {};
+ 	mach_vm_address_t orgTGLAttachPath {}, orgTGLTestResources {};
+@@ -846,6 +864,20 @@
+ 	__attribute__((noinline)) static bool runXELPMemoryStage(IOService *that, IOPCIDevice *provider);
+ 	__attribute__((noinline)) static bool configureAlderLakeNWithGT(IOService *that, IOPCIDevice *provider, IOMemoryMap *map, bool &released);
+ 	bool tglAcceleratorRequested {false}, tglAcceleratorReady {false};
++	bool gt1FramebufferOnly {false}; // -wex-gt1-fb-only: GT1 video-fuse-4 FB-only experiment.
++	bool tglEdpKeep {false}; // -wex-edp-keep: keep the firmware-trained internal eDP link.
++	// EDP_KEEP_SCOPE: the keep must not outlive a pipe teardown. Display sleep disables the
++	// pipe, and if the next hwRegsNeedUpdate is still answered "no update" the donor never
++	// replays DDI timing/PPS, so the panel is powered but carries no signal (black screen).
++	uint32_t tglEdpKeptCount {};       // suppressed hwRegsNeedUpdate calls since load
++	volatile bool tglEdpKeepBroken {}; // pipe was torn down: keep suppressing (never retrain)
++	// EDP_KEEP_AFTER_DOZE instrumentation: every hwRegsNeedUpdate path is counted so a
++	// sleep/wake test can tell "hook never ran" from "hook ran but passed the answer through".
++	uint32_t tglEdpKeepCalls {};       // total invocations seen since load
++	uint32_t tglEdpKeepPassed {};      // invocations where the donor answer was returned
++	uint32_t tglEdpKeepAfterDoze {};   // suppressions that happened after a teardown
++	uint32_t tglDozeHoldCount {};      // disableDisplay calls skipped while in Doze
++	bool gt1AcceleratorTrial {false}; // -wex-gt1-accel: admit the donor accelerator with a PAVP guard.
+ 	mach_vm_address_t orgTGLAcceleratorProbe {}, orgTGLAcceleratorFailure {};
+ 	mach_vm_address_t orgTGLAcceleratorRegister {}, orgTGLAcceleratorStatusMemory {}, orgTGLAcceleratorEngine {};
+ 	static IOService *wrapTGLAcceleratorProbe(IOService *that, IOService *provider, SInt32 *score);

@@ -9,7 +9,7 @@
 | Limitation | Details |
 | --- | --- |
 | No VP9 / AV1 hardware decode | `VTIsHardwareDecodeSupported()` reports only H.264 / HEVC; the bundle has no matching decoders. 4K AV1 is CPU-only — prefer HEVC / H.264 sources for streaming |
-| iGPU media engine fused off | `video=4` → VCS0 / VECS0 do not exist. Forcing the iGPU accelerator through VideoToolbox panicked twice, both in `IGHardwareRingBufferMedia::init` with `scheduler->cs[1]` == NULL. It's a silicon-level gap a patch cannot fake; the price is keeping VADriver at `chmod 000` |
+| iGPU media engine fused off | `video=4` → VCS0 / VECS0 do not exist. The iGPU accelerator itself works (Metal 2, hardware-accelerated desktop compositing), but any VideoToolbox hardware decode panics: `IGHardwareRingBufferMedia::init` dereferences a NULL `scheduler->cs[1]`, CR2=`0x284`, process `VTDecoderXPCService`. This is a silicon-level gap no patch can fake; `AppleIntelTGLGraphicsVADriver.bundle` must stay renamed `.disabled` (or chmod 000), with decoding falling through to the dGPU's NVDEC or software. See [Appendix A](06-wex-upgrade.md#s6-5) |
 | Internal panel wired to the iGPU only | Optimus has no MUX; the eDP panel runs on the iGPU and the dGPU never drives a display |
 | Thunderbolt / USB4 | Hardware present, no driver on the macOS side |
 | MTLDriver is ad-hoc signed | Re-signed after the leak fix, loads under `amfi=0x80`; a macOS update or donor reinstall overwrites the patch and the 90KB-per-submission leak returns |

@@ -10,7 +10,7 @@ Three layers: kexts injected via `config.plist → Kernel/Add`, donor / NVIDIA d
 
 Grouped by function, versions in parentheses; the `.kext` suffix is omitted throughout:
 
-- **Base**: Lilu 1.7.3, VirtualSMC 1.3.9, AMFIPass 1.4.1, **WhateverXe 0.7.0 (patched build, the core of this setup)**
+- **Base**: Lilu 1.7.3, VirtualSMC 1.3.9, AMFIPass 1.4.1, **WhateverXe 0.8.0 (patched build, the core of this setup)**
 - **Display / audio / power**: AppleALC 1.9.9, BrightnessKeys 1.0.4, CpuTscSync 1.1.3, RestrictEvents 1.1.7, SMCBatteryManager / SMCLightSensor / SMCProcessor 1.3.9
 - **USB / storage**: USBToolBox 1.2.0, UTBMap 1.1, XHCI-unsupported 0.9.2, NVMeFix 1.1.4, PC711Probe 1.8.1
 - **Wireless**: AirportItlwm 2.4.0, BlueToolFixup 2.7.3, IntelBTPatcher 2.5.0, IntelBluetoothFirmware 2.5.0
@@ -20,7 +20,7 @@ The I2C group must be ordered "plugins → main kext → satellite": `VoodooInpu
 
 ### Drivers installed into the system
 
-- `WhateverXe-Graphics-0.4.0.pkg` → `/Library/Extensions/AppleIntelTGLCompat.kext`, `AppleIntelTGLGraphics.kext` (16.0.32/16.0.0), `AppleIntelTGLGraphicsFramebuffer.kext` (16.0.0), plus four bundles under `/Library/GPUBundles/` (`MTLDriver`, `GLDriver`, `XeCompilerAdapter`, `VADriver`)
+- `WhateverXe-Graphics-0.4.1.pkg` → `/Library/Extensions/AppleIntelTGLCompat.kext` (0.8.0), `AppleIntelTGLGraphics.kext` (16.0.32), `AppleIntelTGLGraphicsFramebuffer.kext` (16.0.32), plus four bundles under `/Library/GPUBundles/` (`MTLDriver`, `GLDriver`, `XeCompilerAdapter`, `VADriver`). **`VADriver` must stay renamed to `.disabled`**, otherwise enabling acceleration panics on the first decode — see [Appendix A](06-wex-upgrade.md#s6-5)
 - NullMoth `nvidia-macos-driver` 2.7.2 → `NVRM` (GSP-RM port; manages VRAM and interrupts), `NVAccel` (registers IOAccelerator), `NVRMFB`, `NVRMAGDC` in `/Library/Extensions`; plus `/Library/GPUBundles/NVMTLDriver.bundle`
 
 Besides the Metal translation layer, `NVMTLDriver.bundle` ships a full codec set: `libnvdec_h264.dylib`, `libnvdec_h264_t2d.dylib`, `libnvdec_hevc.dylib`, `libnvenc_h264_ga10x.dylib`, `libnvenc_hevc_ga10x.dylib`, `libnvmtl_translate.dylib`. These `libnvdec_*` libraries register decoders with VideoToolbox, so **H.264 / HEVC hardware decode actually runs on the dGPU's NVDEC**. Registration requires the host process to have VideoToolbox loaded; the allowlist `/Library/GPUBundles/nvmtl-allow.txt` contains `*` and `!WindowServer`.

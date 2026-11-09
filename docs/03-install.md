@@ -24,18 +24,18 @@ ioreg -l | grep -E 'TPD0|PNP0C50'
 
 |                                                                                                                       |                                   |
 | --------------------------------------------------------------------------------------------------------------------- | --------------------------------- |
-| 从 [WhateverXe](https://github.com/b00t0x/WhateverXe) Release 装 `WhateverXe-Graphics` pkg（本机 0.4.0），再 \`kmutil inspect | grep -i TGL\` 确认三个 kext 进了 AuxKC。 |
+| 从 [WhateverXe](https://github.com/b00t0x/WhateverXe) Release 装 `WhateverXe-Graphics` pkg（本机 0.4.1，与 WEX 0.8.0 必须配套），再 \`kmutil inspect | grep -i TGL\` 确认三个 kext 进了 AuxKC。 |
 
 <a id="s3-3"></a>
 
 **第 3 步 · 编译补丁版 WhateverXe**
 
-官方 0.7.0 不认这颗 11400H（fuse `video=4`），必须用[本仓库补丁](05-patches.md#s5-1)。
+官方 0.8.0 仍不认这颗 11400H（fuse `video=4`），必须用[本仓库补丁](05-patches.md#s5-3)。
 
 ```bash
 git clone https://github.com/b00t0x/WhateverXe.git && cd WhateverXe
-git checkout <0.7.0 对应的 tag 或 commit>
-patch -p1 < /path/to/ASUS-TGL-H45-OpenCore/patches/whateverxe-0.7.0-gt1.patch
+git checkout <0.8.0 对应的 tag 或 commit>
+patch -p1 < /path/to/ASUS-TGL-H45-OpenCore/patches/whateverxe-0.8.0-gt1.patch
 python3 tools/build.py --release --sdk /path/to/MacKernelSDK-master \
   --lilu /path/to/Lilu.kext --output build
 ```
@@ -81,6 +81,7 @@ A 让 VideoToolbox 绕开熔断的核显媒体引擎，解码落到独显 NVDEC�
 | 只有 7MB 显存          | 查 donor pkg 是否装好、AuxKC 是否有效、EFI 里 WEX 是不是补丁版            |
 | 全黑但有声音             | 确认 `-wex-edp-keep` 在、且二进制认这个参数                          |
 | 熄屏后不亮              | `strings` 搜 `WEXEDPDozeHoldCount`，确认是带 doze-hold 的补丁版   |
-| 硬解又 panic 了        | 检查 `AppleIntelTGLGraphicsVADriver.bundle` 是否还是 `000` 权限 |
+| 硬解又 panic 了        | 检查 `AppleIntelTGLGraphicsVADriver.bundle` 是否已改名 `.disabled`（或 `chmod 000`）；`sudo bash tools/accel-trial.sh off` 可一键回退 |
+| 开机到进度条尽头自动重启 | 这是 `VTDecoderXPCService` 的媒体引擎 panic（CR2=`0x284`），确认 Intel VADriver 已下线，见[附录 A](06-wex-upgrade.md#s6-5) |
 
 每次改 EFI 前留一份备份，改完用 `plutil -lint config.plist` 检查格式。

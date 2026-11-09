@@ -29,3 +29,13 @@ The `EDP_KEEP_SCOPE` / `EDP_KEEP_AFTER_DOZE` branches left over from debugging a
 | Finish | `codesign -f -s - <file>` (ad-hoc re-sign) |
 
 Back up the original first and verify the original bytes at that offset (a mismatch means a different donor version — don't force it). Effect: 50 submissions, RSS 5.0→9.5MB becomes 5.0→5.7MB; 5.9MB after 500. Full commands are in [Installation Step 5](03-install.md#s3-5).
+
+<a id="s5-3"></a>
+
+### 5.3 `patches/whateverxe-0.8.0-gt1.patch` (in use)
+
+Against the official **WhateverXe 0.8.0** source: 381 lines of diff touching only `kern_xe.cpp` (319 lines) and `kern_xe.hpp` (62 lines). Ported from the 5.1 functional diff with `patch -p1 -F3` — all **15 hunks applied, 0 `.rej`**. Same features as 5.1; only the line numbers changed. The new `kern_display13_*.inc` files in 0.8.0 are Display13 / DSI-only and never touch the TGL eDP path.
+
+The resulting `WhateverXe.kext` (0.8.0 RELEASE / 1,840,416 B / sha256 `28ec9a97…82227`) is in `oc/Kexts/`. **It must be paired with WhateverXe-Graphics 0.4.1**: install the pkg, then replace the kext, then reboot.
+
+For the upgrade procedure, the three pitfalls, why the Intel VA driver must be disabled (with panic signatures), and the verification checklist, see [Appendix A](06-wex-upgrade.md#s6).
