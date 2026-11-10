@@ -155,7 +155,7 @@ reset
 | 合盖 / S3 睡眠 | 仍未解，`pmset displaysleepnow` 可测唤醒黑屏 |
 | Intel Quick Sync | 主动禁用（fuse 无 VCS0），解码走独显 nvdec 或软解 |
 | 核显 Metal 版本 | Metal 2，UI 已硬件加速；对 Metal 3 专属特性有影响 |
-| Thunderbolt / USB4 | 控制器在，macOS 无驱动 |
+| HDMI | 仍未解，显示异常或黑屏 |
 
 <a id="s6-9"></a>
 
@@ -172,4 +172,3 @@ reset
 
 A.3 里提到的 `tools/WhateverXe-0.8.0-fbonly/` 是**本机源码副本，不在仓库里**（仓库只放自己写的改动）。需要重建时，从上游 0.8.0 源码应用本仓库补丁即可。
 
-**绝对不要把本机原始 `config.plist`（含真实三码）覆盖进 `oc/`。** 每次同步后都应重新跑一次三码复扫，确认将入库的文件 0 命中。
