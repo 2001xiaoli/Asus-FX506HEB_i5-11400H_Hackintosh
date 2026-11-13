@@ -32,10 +32,32 @@ Back up the original first and verify the original bytes at that offset (a misma
 
 <a id="s5-3"></a>
 
-### 5.3 `patches/whateverxe-0.8.0-gt1.patch` (in use)
+### 5.3 `patches/whateverxe-0.8.0-gt1.patch` (0.8.0 era, historical)
 
 Against the official **WhateverXe 0.8.0** source: 381 lines of diff touching only `kern_xe.cpp` (319 lines) and `kern_xe.hpp` (62 lines). Ported from the 5.1 functional diff with `patch -p1 -F3` — all **15 hunks applied, 0 `.rej`**. Same features as 5.1; only the line numbers changed. The new `kern_display13_*.inc` files in 0.8.0 are Display13 / DSI-only and never touch the TGL eDP path.
 
-The resulting `WhateverXe.kext` (0.8.0 RELEASE / 1,840,416 B / sha256 `28ec9a97…82227`) is in `oc/Kexts/`. **It must be paired with WhateverXe-Graphics 0.4.1**: install the pkg, then replace the kext, then reboot.
+The matching 0.8.0 binary (1,840,416 B / sha256 `28ec9a97…82227`) is no longer in `oc/Kexts/`; this patch is kept as the porting baseline for 0.8.2.
 
-For the upgrade procedure, the three pitfalls, why the Intel VA driver must be disabled (with panic signatures), and the verification checklist, see [Appendix A](06-wex-upgrade.md#s6).
+<a id="s5-4"></a>
+
+### 5.4 `patches/whateverxe-0.8.2-gt1-backlight.patch` (in use)
+
+Against the official **WhateverXe 0.8.2** source: **16 hunks**, 434 lines, again only `kern_xe.cpp` / `kern_xe.hpp`. It merges the 5.3 GT1 series with the **backlight duty fix**:
+
+- **GT1 series**: fuse override for `video=4` (`XELPSmallGTFuseExtension`), the three `-wex-gt1-fb-only` / `-wex-gt1-accel` / `-wex-edp-keep` switches, PAVP guard, doze-hold — identical to 5.3.
+- **Backlight fix (new)**: routes `AppleIntelFramebufferController::hwSetBacklight` on the TGL branch. The wrapper runs the original first (keeping the DPCD side effects), then recomputes `duty = period × brightness / 0xFFFF` with the **hardware period from `0xC8254`** and **64-bit arithmetic**, and overwrites `0xC8258`. The native path uses the cached period at `controller+0xE60` (about 18.5% of the hardware value) and a 32-bit `imull` that overflows, so full brightness only reached 18.5% duty; with the fix it reaches 99.8%. Entry bytes `55 48 89 e5 41 56 53 48 ff 05 90 44 09 00` (donor offset `0x4A56A`) are verified first — on mismatch the hook is not installed and behaviour falls back to stock, so boot is never at risk.
+
+Apply and verify:
+
+```bash
+cd WhateverXe-0.8.2-src && patch -p1 < patches/whateverxe-0.8.2-gt1-backlight.patch
+# 16 hunks, 0 .rej; then build
+K=build/WhateverXe.kext/Contents/MacOS/WhateverXe
+strings -a $K | grep -c -E '\-wex-gt1|WEXEDPKeep'   # must be 8
+strings -a $K | grep -c WhateverXeGraphicsABI        # must be >= 1
+strings -a $K | grep -c TGLPanelBacklightReady       # must be >= 1
+```
+
+The resulting `WhateverXe.kext` (0.8.2 RELEASE / x86_64 / **1,845,040 B / sha256 `e0bbc744…4026`**) is in `oc/Kexts/`. **It must be paired with WhateverXe-Graphics 0.4.3 (which ships Compat 0.8.1)**; Compat 0.8.1 checks `WhateverXeGraphicsABI`, and a too-old kext triggers `WEX inactive; leaving firmware graphics in control` — visible as 7 MB VRAM.
+
+For the upgrade procedure, the six pitfalls, symptom triage and the verification checklist, see [Appendix A](06-wex-upgrade.md#s6); the full timeline and measured values of this upgrade are in [A.10](06-wex-upgrade.md#s6-10).

@@ -22,28 +22,41 @@ You're done when `TPD0` shows registered / matched / active and `VoodooI2CHID` /
 
 **Step 2 · Install the donor drivers**
 
-From the [WhateverXe](https://github.com/b00t0x/WhateverXe) Releases, install the `WhateverXe-Graphics` pkg (0.4.1 here; must pair with WEX 0.8.0), then run `kmutil inspect | grep -i TGL` to confirm the three kexts landed in the AuxKC.
+From the [WhateverXe](https://github.com/b00t0x/WhateverXe) Releases, install the `WhateverXe-Graphics` pkg (**0.4.3** here; must pair with WEX **0.8.2**), then run `kmutil inspect | grep -i TGL` to confirm the three kexts landed in the AuxKC.
+
+Right after installing, **rename the VA driver back to `.disabled`** (the pkg payload restores it), otherwise the accelerated boot in Step 3 panics on the first decode:
+
+```bash
+sudo mv /Library/GPUBundles/AppleIntelTGLGraphicsVADriver.bundle \
+        /Library/GPUBundles/AppleIntelTGLGraphicsVADriver.bundle.disabled
+ls -ld /Library/GPUBundles/AppleIntelTGLGraphicsVADriver.bundle*   # only .disabled* should remain
+```
 
 <a id="s3-3"></a>
 
 **Step 3 · Build the patched WhateverXe**
 
-Stock 0.8.0 still rejects this 11400H (fuse `video=4`), so you must use [this repo's patch](05-patches.md#s5-3).
+Stock 0.8.2 still rejects this 11400H (fuse `video=4`), so you must use [this repo's patch](05-patches.md#s5-4).
 
 ```bash
 git clone https://github.com/b00t0x/WhateverXe.git && cd WhateverXe
-git checkout <tag or commit corresponding to 0.8.0>
-patch -p1 < /path/to/ASUS-TGL-H45-OpenCore/patches/whateverxe-0.8.0-gt1.patch
+git checkout <tag or commit corresponding to 0.8.2>
+patch -p1 < /path/to/ASUS-TGL-H45-OpenCore/patches/whateverxe-0.8.2-gt1-backlight.patch
 python3 tools/build.py --release --sdk /path/to/MacKernelSDK-master \
   --lilu /path/to/Lilu.kext --output build
 ```
+
+The patch is a **combined** one: the GT1 series (fuse override, three flags, PAVP guard, doze-hold) and the **backlight duty fix** live in the same file, and `patch -p1` should report **16 hunks, 0 `.rej`**. Never port only part of it — during the 0.8.2 upgrade, porting just the backlight hook produced the 7 MB fallback again.
 
 Dependencies: MacKernelSDK, Lilu 1.7.2 SDK, Command Line Tools. Two gotchas: Lilu headers are symlinks, so use `cp -RL` to dereference them when assembling `Lilu.kext/Contents/Resources/{Headers,Library}`; and run `rm -rf build` before every rebuild.
 
 After placing it in `EFI/OC/Kexts/`, **always verify the flags really made it into the binary** (one full test round was wasted on a stale binary whose boot-args were silently ignored):
 
 ```bash
-strings EFI/OC/Kexts/WhateverXe.kext/Contents/MacOS/WhateverXe | grep -E 'wex-gt1|wex-edp-keep'
+K=EFI/OC/Kexts/WhateverXe.kext/Contents/MacOS/WhateverXe
+strings -a $K | grep -c -E '\-wex-gt1|WEXEDPKeep'   # must be 8
+strings -a $K | grep -c WhateverXeGraphicsABI        # must be >= 1 (Compat 0.8.1 gate)
+strings -a $K | grep -c TGLPanelBacklightReady       # must be >= 1 (backlight fix)
 ```
 
 **Step 4 · Install the dGPU driver**
@@ -76,7 +89,7 @@ A makes VideoToolbox skip the fused-off iGPU media engine so decoding falls thro
 | Symptom | Action |
 | --- | --- |
 | Won't boot / kernel panic | Restore the stock `WhateverXe.kext` and remove the three `-wex-*` flags from boot-args |
-| Only 7MB VRAM | Check the donor pkg, AuxKC validity, and whether EFI holds the patched WEX |
+| Only 7MB VRAM | Three checks: donor pkg installed and AuxKC valid; `strings` shows 8 GT1 entries; the kext provides `WhateverXeGraphicsABI` (Compat 0.8.1 requires it) |
 | Black screen but audio works | Confirm `-wex-edp-keep` is present and the binary recognizes it |
 | Screen stays dark after display sleep | `strings` for `WEXEDPDozeHoldCount` to confirm the doze-hold build |
 | Hardware decode panics again | Check that `AppleIntelTGLGraphicsVADriver.bundle` is renamed `.disabled` (or chmod 000); `sudo bash tools/accel-trial.sh off` rolls everything back |

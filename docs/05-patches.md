@@ -32,10 +32,32 @@
 
 <a id="s5-3"></a>
 
-### 5.3 `patches/whateverxe-0.8.0-gt1.patch`（本机在用）
+### 5.3 `patches/whateverxe-0.8.0-gt1.patch`（0.8.0 时期，历史）
 
 相对官方 **WhateverXe 0.8.0** 源码，381 行 diff，只动 `kern_xe.cpp`（319 行）和 `kern_xe.hpp`（62 行）。用 5.1 的功能 diff 作补丁移植，`patch -p1 -F3` **15 个 hunk 全通过、0 个 `.rej`**；功能与 5.1 相同，差异只在适配 0.8.0 的行号。0.8.0 新增的 `kern_display13_*.inc` 都是 Display13 / DSI 专用，不碰 TGL eDP 路径。
 
-产物 `WhateverXe.kext`（0.8.0 RELEASE / 1,840,416 B / sha256 `28ec9a97…82227`）已放在 `oc/Kexts/`。**必须与 WhateverXe-Graphics 0.4.1 配套**，先装 pkg 再换 kext，最后重启。
+该补丁对应的产物 `WhateverXe.kext` 0.8.0（1,840,416 B / sha256 `28ec9a97…82227`）现已不在 `oc/Kexts/`，只作为 0.8.2 补丁的移植底本保留。
 
-升级步骤、三个坑、Intel VDA 必须下线的完整推导与 panic 判据、验证清单，见[附录 A](06-wex-upgrade.md#s6)。
+<a id="s5-4"></a>
+
+### 5.4 `patches/whateverxe-0.8.2-gt1-backlight.patch`（本机在用）
+
+相对官方 **WhateverXe 0.8.2** 源码，**16 个 hunk**，434 行，同样只动 `kern_xe.cpp` / `kern_xe.hpp`。这是 5.3 的 GT1 系列与**背光 duty 修正**合并后的单一补丁：
+
+- **GT1 系列**：fuse 放行（`video=4` 的 `XELPSmallGTFuseExtension`）、`-wex-gt1-fb-only` / `-wex-gt1-accel` / `-wex-edp-keep` 三开关、PAVP 守卫、doze-hold 等，与 5.3 完全一致。
+- **背光修正（新增）**：在 TGL 分支 route `AppleIntelFramebufferController::hwSetBacklight`，wrapper 先跑原函数保留 DPCD 副作用，再用**硬件 period `0xC8254`** 和 **64 位乘法**重算 `duty = period × brightness / 0xFFFF` 并覆盖 `0xC8258`。native 路径用的是 `controller+0xE60` 里的缓存 period（约为硬件的 18.5%）且 `imull` 32 位会溢出，满亮度只能到 18.5% 占空比；修正后为 99.8%。入口字节 `55 48 89 e5 41 56 53 48 ff 05 90 44 09 00`（donor 偏移 `0x4A56A`）校验不符则不装 hook，行为退回原样，不影响开机。
+
+应用与验收：
+
+```bash
+cd WhateverXe-0.8.2-src && patch -p1 < patches/whateverxe-0.8.2-gt1-backlight.patch
+# 16 hunk 全过、0 个 .rej；然后编译
+K=build/WhateverXe.kext/Contents/MacOS/WhateverXe
+strings -a $K | grep -c -E '\-wex-gt1|WEXEDPKeep'   # 必须 8
+strings -a $K | grep -c WhateverXeGraphicsABI        # 必须 ≥1
+strings -a $K | grep -c TGLPanelBacklightReady       # 必须 ≥1
+```
+
+产物 `WhateverXe.kext`（0.8.2 RELEASE / x86_64 / **1,845,040 B / sha256 `e0bbc744…4026`**）已放在 `oc/Kexts/`。**必须与 WhateverXe-Graphics 0.4.3（内含 Compat 0.8.1）配套**；Compat 0.8.1 会检查 `WhateverXeGraphicsABI`，kext 太旧就会 `WEX inactive; leaving firmware graphics in control`，表现是显存 7 MB。
+
+升级步骤、六个坑、按症状分诊与验证清单，见[附录 A](06-wex-upgrade.md#s6)；本次升级的完整时间线与实测值见 [A.10](06-wex-upgrade.md#s6-10)。
